@@ -1,0 +1,20 @@
+{
+  "name": "tts-reader-extension",
+  "version": "1.0.0",
+  "description": "Chrome extension that reads selected text using Google Cloud Text-to-Speech API or OpenAI TTS API with automatic text chunking and sequential playback",
+  "main": "background.js",
+  "scripts": {
+    "generate-icons": "node generate-icons.js"
+  },
+  "keywords": [
+    "chrome-extension",
+    "text-to-speech",
+    "google-cloud",
+    "tts"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "chrome-types": "^0.1.345"
+  }
+}

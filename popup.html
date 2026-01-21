@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTS Reader</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 320px;
+      padding: 10px;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      resize: vertical;
+    }
+    .settings {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    select, input {
+      width: 160px;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    .api-key {
+      margin-top: 10px;
+    }
+    .api-key input {
+      width: 100%;
+      margin-top: 5px;
+    }
+    .status {
+      margin-top: 10px;
+      color: #666;
+      font-style: italic;
+      font-size: 12px;
+    }
+    .mt-4 {
+      margin-top: 4px;
+    }
+    .provider-section {
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>TTS Reader</h2>
+    
+    <div>
+      <label for="text">Selected Text:</label>
+      <textarea id="text" placeholder="Select text on the page or type here..."></textarea>
+    </div>
+    
+    <div class="settings">
+      <div class="row">
+        <label for="provider">Provider:</label>
+        <select id="provider">
+          <option value="google">Google Cloud</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+      
+      <div class="row">
+        <label for="language">Language:</label>
+        <select id="language">
+          <option value="en-US">English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="es-ES">Spanish</option>
+          <option value="fr-FR">French</option>
+          <option value="de-DE">German</option>
+          <option value="ja-JP">Japanese</option>
+          <option value="ko-KR">Korean</option>
+          <option value="zh-CN">Chinese</option>
+        </select>
+      </div>
+      
+      <div class="row">
+        <label for="voice">Voice:</label>
+        <select id="voice">
+          <!-- Options will be populated by JavaScript -->
+        </select>
+      </div>
+      
+      <div id="openaiModelRow" class="row hidden">
+        <label for="openaiModel">Model:</label>
+        <select id="openaiModel">
+          <option value="tts-1">tts-1 (fast)</option>
+          <option value="tts-1-hd">tts-1-hd (high quality)</option>
+        </select>
+      </div>
+    </div>
+    
+    <button id="speak">Speak</button>
+    
+    <div class="provider-section">
+      <div id="googleApiKeySection" class="api-key">
+        <label for="googleApiKey">Google Cloud API Key:</label>
+        <input type="password" id="googleApiKey" placeholder="Enter Google API key">
+        <button class="mt-4" id="saveGoogleApiKey">Save Key</button>
+      </div>
+      
+      <div id="openaiApiKeySection" class="api-key hidden">
+        <label for="openaiApiKey">OpenAI API Key:</label>
+        <input type="password" id="openaiApiKey" placeholder="Enter OpenAI API key">
+        <button class="mt-4" id="saveOpenaiApiKey">Save Key</button>
+      </div>
+    </div>
+    
+    <div class="status" id="status"></div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
