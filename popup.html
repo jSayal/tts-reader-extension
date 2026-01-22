@@ -4,81 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TTS Reader</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      width: 320px;
-      padding: 10px;
-    }
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    textarea {
-      width: 100%;
-      height: 100px;
-      resize: vertical;
-    }
-    .settings {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    select, input {
-      width: 160px;
-    }
-    button {
-      background-color: #4285f4;
-      color: white;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #3367d6;
-    }
-    .api-key {
-      margin-top: 10px;
-    }
-    .api-key input {
-      width: 100%;
-      margin-top: 5px;
-    }
-    .status {
-      margin-top: 10px;
-      color: #666;
-      font-style: italic;
-      font-size: 12px;
-    }
-    .mt-4 {
-      margin-top: 4px;
-    }
-    .provider-section {
-      border-top: 1px solid #ccc;
-      padding-top: 10px;
-      margin-top: 10px;
-    }
-    .hidden {
-      display: none;
-    }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
     <h2>TTS Reader</h2>
-    
+
     <div>
       <label for="text">Selected Text:</label>
       <textarea id="text" placeholder="Select text on the page or type here..."></textarea>
     </div>
-    
+
     <div class="settings">
       <div class="row">
         <label for="provider">Provider:</label>
@@ -87,7 +23,7 @@
           <option value="openai">OpenAI</option>
         </select>
       </div>
-      
+
       <div class="row">
         <label for="language">Language:</label>
         <select id="language">
@@ -101,14 +37,14 @@
           <option value="zh-CN">Chinese</option>
         </select>
       </div>
-      
+
       <div class="row">
         <label for="voice">Voice:</label>
         <select id="voice">
           <!-- Options will be populated by JavaScript -->
         </select>
       </div>
-      
+
       <div id="openaiModelRow" class="row hidden">
         <label for="openaiModel">Model:</label>
         <select id="openaiModel">
@@ -117,26 +53,105 @@
         </select>
       </div>
     </div>
-    
-    <button id="speak">Speak</button>
-    
+
+    <!-- State: Idle -->
+    <div id="idleState">
+      <button id="speakBtn" class="btn-primary btn-icon" style="width: 100%;">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+        </svg>
+        Speak
+      </button>
+    </div>
+
+    <!-- State: Loading -->
+    <div id="loadingState" class="state-container hidden">
+      <div class="loading-container">
+        <div class="spinner"></div>
+        <span id="progressText" class="progress-text">Processing...</span>
+        <button id="cancelBtn" class="btn-secondary btn-small">Cancel</button>
+      </div>
+    </div>
+
+    <!-- State: Playing -->
+    <div id="playingState" class="state-container hidden">
+      <div class="playback-container">
+        <div class="playback-status">
+          <span class="pulse-dot"></span>
+          <span>Playing audio...</span>
+        </div>
+        <div class="controls">
+          <button id="pauseBtn" class="btn-secondary btn-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+            </svg>
+            Pause
+          </button>
+          <button id="stopBtn" class="btn-danger btn-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 6h12v12H6z"/>
+            </svg>
+            Stop
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- State: Paused -->
+    <div id="pausedState" class="state-container hidden">
+      <div class="playback-container">
+        <div class="playback-status">
+          <span class="pulse-dot paused"></span>
+          <span>Paused</span>
+        </div>
+        <div class="controls">
+          <button id="resumeBtn" class="btn-success btn-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            Resume
+          </button>
+          <button id="stopBtn2" class="btn-danger btn-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 6h12v12H6z"/>
+            </svg>
+            Stop
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- State: Error -->
+    <div id="errorState" class="error-container hidden">
+      <div class="error-message">
+        <svg class="error-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+        </svg>
+        <p id="errorMessage" class="error-text">An error occurred.</p>
+      </div>
+      <div class="error-actions">
+        <button id="dismissBtn" class="btn-secondary btn-small">Dismiss</button>
+        <button id="retryBtn" class="btn-primary btn-small hidden">Retry</button>
+      </div>
+    </div>
+
     <div class="provider-section">
       <div id="googleApiKeySection" class="api-key">
         <label for="googleApiKey">Google Cloud API Key:</label>
         <input type="password" id="googleApiKey" placeholder="Enter Google API key">
-        <button class="mt-4" id="saveGoogleApiKey">Save Key</button>
+        <button class="btn-secondary btn-small" id="saveGoogleApiKey">Save Key</button>
       </div>
-      
+
       <div id="openaiApiKeySection" class="api-key hidden">
         <label for="openaiApiKey">OpenAI API Key:</label>
         <input type="password" id="openaiApiKey" placeholder="Enter OpenAI API key">
-        <button class="mt-4" id="saveOpenaiApiKey">Save Key</button>
+        <button class="btn-secondary btn-small" id="saveOpenaiApiKey">Save Key</button>
       </div>
     </div>
-    
+
     <div class="status" id="status"></div>
   </div>
-  
+
   <script src="popup.js"></script>
 </body>
 </html>

@@ -1,11 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // DOM Elements - Settings
   const textArea = document.getElementById('text');
   const providerSelect = document.getElementById('provider');
   const languageSelect = document.getElementById('language');
   const voiceSelect = document.getElementById('voice');
   const openaiModelRow = document.getElementById('openaiModelRow');
   const openaiModelSelect = document.getElementById('openaiModel');
-  const speakButton = document.getElementById('speak');
   const googleApiKeyInput = document.getElementById('googleApiKey');
   const openaiApiKeyInput = document.getElementById('openaiApiKey');
   const saveGoogleApiKeyButton = document.getElementById('saveGoogleApiKey');
@@ -13,6 +13,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const googleApiKeySection = document.getElementById('googleApiKeySection');
   const openaiApiKeySection = document.getElementById('openaiApiKeySection');
   const statusElement = document.getElementById('status');
+
+  // DOM Elements - State containers
+  const idleState = document.getElementById('idleState');
+  const loadingState = document.getElementById('loadingState');
+  const playingState = document.getElementById('playingState');
+  const pausedState = document.getElementById('pausedState');
+  const errorState = document.getElementById('errorState');
+
+  // DOM Elements - Buttons
+  const speakBtn = document.getElementById('speakBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const stopBtn2 = document.getElementById('stopBtn2');
+  const retryBtn = document.getElementById('retryBtn');
+  const dismissBtn = document.getElementById('dismissBtn');
+
+  // DOM Elements - Dynamic content
+  const progressText = document.getElementById('progressText');
+  const errorMessage = document.getElementById('errorMessage');
+
+  // Current request ID for cancellation
+  let currentRequestId = null;
 
   // Voice options for each provider
   const voiceOptions = {
@@ -38,17 +62,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Load saved settings
+  // Initialize
   loadSettings();
-  
-  // Get selected text from the active tab
   getCurrentTabSelectedText();
-  
-  // Check if there's audio content to play
-  checkForAudioContent();
+  loadTtsState();
 
-  // Event listeners
-  speakButton.addEventListener('click', handleSpeak);
+  // Event listeners - Settings
   saveGoogleApiKeyButton.addEventListener('click', () => saveApiKey('google', googleApiKeyInput));
   saveOpenaiApiKeyButton.addEventListener('click', () => saveApiKey('openai', openaiApiKeyInput));
   providerSelect.addEventListener('change', handleProviderChange);
@@ -63,46 +82,274 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.set({ openaiModel: openaiModelSelect.value });
   });
 
-  // Function to load saved settings
+  // Event listeners - Playback controls
+  speakBtn.addEventListener('click', handleSpeak);
+  cancelBtn.addEventListener('click', handleCancel);
+  pauseBtn.addEventListener('click', handlePause);
+  stopBtn.addEventListener('click', handleStop);
+  resumeBtn.addEventListener('click', handleResume);
+  stopBtn2.addEventListener('click', handleStop);
+  retryBtn.addEventListener('click', handleRetry);
+  dismissBtn.addEventListener('click', handleDismiss);
+
+  // Listen for state changes from storage
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local') {
+      if (changes.ttsState) {
+        renderState(changes.ttsState.newValue);
+      }
+      if (changes.audioQueue && changes.audioQueue.newValue) {
+        checkForAudioContent();
+      }
+    }
+  });
+
+  // Load TTS state from storage
+  function loadTtsState() {
+    chrome.storage.local.get(['ttsState'], (result) => {
+      const state = result.ttsState || { status: 'idle', error: null, progress: null, requestId: null };
+      currentRequestId = state.requestId;
+      renderState(state);
+    });
+  }
+
+  // Render UI based on current state
+  function renderState(state) {
+    // Hide all state containers
+    idleState.classList.add('hidden');
+    loadingState.classList.add('hidden');
+    playingState.classList.add('hidden');
+    pausedState.classList.add('hidden');
+    errorState.classList.add('hidden');
+
+    // Show appropriate container based on status
+    switch (state.status) {
+      case 'idle':
+        idleState.classList.remove('hidden');
+        break;
+
+      case 'loading':
+        loadingState.classList.remove('hidden');
+        if (state.progress) {
+          progressText.textContent = `Processing... ${state.progress.current}/${state.progress.total}`;
+        } else {
+          progressText.textContent = 'Processing...';
+        }
+        currentRequestId = state.requestId;
+        break;
+
+      case 'playing':
+        playingState.classList.remove('hidden');
+        break;
+
+      case 'paused':
+        pausedState.classList.remove('hidden');
+        break;
+
+      case 'error':
+        errorState.classList.remove('hidden');
+        if (state.error) {
+          errorMessage.textContent = state.error.message;
+          // Show retry button only for retryable errors
+          if (state.error.retryable) {
+            retryBtn.classList.remove('hidden');
+          } else {
+            retryBtn.classList.add('hidden');
+          }
+          // Expand API key section for auth errors
+          if (state.error.code === 'AUTH' || state.error.code === 'NO_API_KEY') {
+            expandApiKeySection();
+          }
+        }
+        break;
+
+      default:
+        idleState.classList.remove('hidden');
+    }
+  }
+
+  // Expand the API key section based on current provider
+  function expandApiKeySection() {
+    const provider = providerSelect.value;
+    if (provider === 'google') {
+      googleApiKeySection.classList.remove('hidden');
+      googleApiKeyInput.focus();
+    } else {
+      openaiApiKeySection.classList.remove('hidden');
+      openaiApiKeyInput.focus();
+    }
+  }
+
+  // Handle speak button click
+  function handleSpeak() {
+    const text = textArea.value.trim();
+
+    if (!text) {
+      updateStatus('Please select or enter text to speak', 'error');
+      return;
+    }
+
+    const provider = providerSelect.value;
+    const apiKeyKey = provider === 'google' ? 'googleApiKey' : 'openaiApiKey';
+
+    chrome.storage.local.get([apiKeyKey], (result) => {
+      if (!result[apiKeyKey]) {
+        updateStatus(`Please enter your ${provider === 'google' ? 'Google Cloud' : 'OpenAI'} API key`, 'error');
+        expandApiKeySection();
+        return;
+      }
+
+      // Generate request ID
+      currentRequestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Send message to background script
+      const request = {
+        action: "synthesizeSpeech",
+        text: text,
+        provider: provider,
+        language: languageSelect.value,
+        voice: voiceSelect.value,
+        requestId: currentRequestId
+      };
+
+      if (provider === 'openai') {
+        request.model = openaiModelSelect.value;
+      }
+
+      chrome.runtime.sendMessage(request, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("Error sending message:", chrome.runtime.lastError.message);
+          updateStatus('Connection error. Please try again.', 'error');
+        }
+      });
+    });
+  }
+
+  // Handle cancel button click
+  function handleCancel() {
+    if (currentRequestId) {
+      chrome.runtime.sendMessage({
+        action: 'abortSynthesis',
+        requestId: currentRequestId
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("Error cancelling:", chrome.runtime.lastError.message);
+        }
+      });
+    }
+    // Reset state immediately
+    chrome.storage.local.set({
+      ttsState: { status: 'idle', error: null, progress: null, requestId: null }
+    });
+  }
+
+  // Handle pause button click
+  function handlePause() {
+    sendToContentScript('pauseAudio');
+  }
+
+  // Handle resume button click
+  function handleResume() {
+    sendToContentScript('resumeAudio');
+  }
+
+  // Handle stop button click
+  function handleStop() {
+    sendToContentScript('stopAudio');
+    // Also reset state
+    chrome.storage.local.set({
+      ttsState: { status: 'idle', error: null, progress: null, requestId: null }
+    });
+  }
+
+  // Handle retry button click
+  function handleRetry() {
+    chrome.storage.local.get(['lastRequest'], (result) => {
+      if (result.lastRequest) {
+        const { text, provider, language, voice, model } = result.lastRequest;
+        textArea.value = text;
+        providerSelect.value = provider;
+        languageSelect.value = language;
+        handleProviderChange();
+        voiceSelect.value = voice;
+        if (model) {
+          openaiModelSelect.value = model;
+        }
+        // Trigger speak
+        handleSpeak();
+      } else {
+        // No last request, just dismiss error
+        handleDismiss();
+      }
+    });
+  }
+
+  // Handle dismiss button click
+  function handleDismiss() {
+    chrome.storage.local.set({
+      ttsState: { status: 'idle', error: null, progress: null, requestId: null }
+    });
+  }
+
+  // Send message to content script
+  function sendToContentScript(action) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0] && tabs[0].id) {
+        // Skip chrome:// and other restricted URLs
+        if (tabs[0].url && (tabs[0].url.startsWith('chrome://') || tabs[0].url.startsWith('chrome-extension://'))) {
+          console.log(`Cannot send ${action} to restricted page`);
+          return;
+        }
+        chrome.tabs.sendMessage(tabs[0].id, { action }, (response) => {
+          if (chrome.runtime.lastError) {
+            // Content script not available - this is expected on some pages
+            console.log(`Content script not available for ${action}`);
+          }
+        });
+      }
+    });
+  }
+
+  // Load saved settings
   function loadSettings() {
     chrome.storage.local.get(['provider', 'language', 'voice', 'openaiModel', 'googleApiKey', 'openaiApiKey', 'selectedText'], (result) => {
       if (result.provider) {
         providerSelect.value = result.provider;
         handleProviderChange();
       }
-      
+
       if (result.language) {
         languageSelect.value = result.language;
       }
-      
+
       if (result.openaiModel) {
         openaiModelSelect.value = result.openaiModel;
       }
-      
+
       updateVoiceOptions();
-      
+
       if (result.voice) {
         voiceSelect.value = result.voice;
       }
-      
+
       if (result.googleApiKey) {
         googleApiKeyInput.value = result.googleApiKey;
       }
-      
+
       if (result.openaiApiKey) {
         openaiApiKeyInput.value = result.openaiApiKey;
       }
-      
+
       if (result.selectedText) {
         textArea.value = result.selectedText;
       }
     });
   }
 
-  // Function to handle provider change
+  // Handle provider change
   function handleProviderChange() {
     const provider = providerSelect.value;
-    
+
     // Show/hide API key sections
     if (provider === 'google') {
       googleApiKeySection.classList.remove('hidden');
@@ -113,23 +360,23 @@ document.addEventListener('DOMContentLoaded', () => {
       openaiApiKeySection.classList.remove('hidden');
       openaiModelRow.classList.remove('hidden');
     }
-    
+
     // Update voice options
     updateVoiceOptions();
-    
+
     // Save provider preference
     chrome.storage.local.set({ provider });
   }
 
-  // Function to update voice options based on provider and language
+  // Update voice options based on provider and language
   function updateVoiceOptions() {
     const provider = providerSelect.value;
     const language = languageSelect.value;
     const voices = voiceOptions[provider][language] || voiceOptions[provider]['en-US'];
-    
+
     // Clear existing options
     voiceSelect.innerHTML = '';
-    
+
     // Add new options
     voices.forEach(voice => {
       const option = document.createElement('option');
@@ -137,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
       option.textContent = voice.charAt(0).toUpperCase() + voice.slice(1);
       voiceSelect.appendChild(option);
     });
-    
+
     // Load saved voice if it exists
     chrome.storage.local.get(['voice'], (result) => {
       if (result.voice && voices.includes(result.voice)) {
@@ -146,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Function to get selected text from the active tab
+  // Get selected text from the active tab
   function getCurrentTabSelectedText() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
@@ -156,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
               console.log("Could not connect to content script:", chrome.runtime.lastError.message);
               return;
             }
-            
+
             if (response && response.selectedText && response.selectedText.length > 0) {
               textArea.value = response.selectedText;
             }
@@ -168,95 +415,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Function to handle the speak button click
-  function handleSpeak() {
-    const text = textArea.value.trim();
-    
-    if (!text) {
-      updateStatus('Please select or enter text to speak', 'error');
-      return;
-    }
-    
-    const provider = providerSelect.value;
-    const apiKeyKey = provider === 'google' ? 'googleApiKey' : 'openaiApiKey';
-    
-    chrome.storage.local.get([apiKeyKey, 'provider'], (result) => {
-      if (!result[apiKeyKey]) {
-        updateStatus(`Please enter your ${provider === 'google' ? 'Google Cloud' : 'OpenAI'} API key`, 'error');
-        return;
-      }
-      
-      try {
-        updateStatus('Processing speech...', 'success');
-        
-        // Send message to background script to synthesize speech
-        const request = {
-          action: "synthesizeSpeech",
-          text: text,
-          provider: provider,
-          language: languageSelect.value,
-          voice: voiceSelect.value
-        };
-        
-        if (provider === 'openai') {
-          request.model = openaiModelSelect.value;
-        }
-        
-        chrome.runtime.sendMessage(request, (response) => {
-          if (chrome.runtime.lastError) {
-            console.error("Error sending message to background script:", chrome.runtime.lastError.message);
-            updateStatus('Connection error. Please try again.', 'error');
-            return;
-          }
-          
-          if (response && response.success) {
-            setTimeout(() => {
-              checkForAudioContent();
-            }, 1000);
-          } else {
-            updateStatus('Failed to process speech. Check console for details.', 'error');
-          }
-        });
-      } catch (error) {
-        console.error("Error in handleSpeak:", error);
-        updateStatus('An error occurred. Please try again.', 'error');
-      }
-    });
-  }
-
-  // Function to save API key
+  // Save API key
   function saveApiKey(provider, inputElement) {
     const apiKey = inputElement.value.trim();
-    
+
     if (!apiKey) {
       updateStatus('Please enter a valid API key', 'error');
       return;
     }
-    
+
     const keyName = provider === 'google' ? 'googleApiKey' : 'openaiApiKey';
-    
+
     chrome.storage.local.set({ [keyName]: apiKey }, () => {
       updateStatus(`${provider === 'google' ? 'Google Cloud' : 'OpenAI'} API key saved successfully`, 'success');
     });
   }
 
-  // Function to check for audio content in storage and play it
+  // Check for audio content in storage and play it
   function checkForAudioContent() {
     chrome.storage.local.get(['audioQueue', 'audioTimestamp'], (result) => {
       if (result.audioQueue && result.audioQueue.length > 0) {
         try {
           // Send the audio queue to the content script
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs[0]) {
+            if (tabs[0] && tabs[0].id) {
+              // Skip chrome:// and other restricted URLs
+              if (tabs[0].url && (tabs[0].url.startsWith('chrome://') || tabs[0].url.startsWith('chrome-extension://'))) {
+                updateStatus('Cannot play audio on this page. Navigate to a website first.', 'error');
+                return;
+              }
               chrome.tabs.sendMessage(tabs[0].id, {
                 action: "playAudioQueue",
                 audioQueue: result.audioQueue
               }, (response) => {
                 if (chrome.runtime.lastError) {
-                  console.error("Error sending audio queue to content script:", chrome.runtime.lastError.message);
-                  updateStatus('Error playing audio', 'error');
+                  // Content script not available
+                  console.log("Content script not available for audio playback");
+                  updateStatus('Refresh the page to enable audio playback', 'error');
                 } else if (response && response.success) {
-                  updateStatus('Playing audio...', 'success');
                   // Clear the queue from storage
                   chrome.storage.local.remove(['audioQueue', 'audioTimestamp']);
                 }
@@ -270,19 +466,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-  
-  // Set up a listener for storage changes to detect new audio content
-  chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes.audioQueue && changes.audioQueue.newValue) {
-      checkForAudioContent();
-    }
-  });
-  
-  // Helper function to update status message
+
+  // Update status message
   function updateStatus(message, type = 'info') {
     statusElement.textContent = message;
     statusElement.className = 'status ' + type;
-    
+
     setTimeout(() => {
       statusElement.textContent = '';
       statusElement.className = 'status';
