@@ -253,6 +253,32 @@ button:disabled {
   }
 }
 
+/* Waveform Visualization */
+.waveform-container {
+  width: 100%;
+  margin-bottom: 8px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 50%, #f8f9fa 100%);
+  border: 1px solid var(--border);
+}
+
+.waveform {
+  width: 100%;
+  height: 60px;
+  display: block;
+}
+
+.waveform .waveform-bar {
+  fill: var(--primary);
+  opacity: 0.8;
+}
+
+.waveform.paused .waveform-bar {
+  fill: var(--warning);
+  opacity: 0.6;
+}
+
 /* Error State */
 .error-container {
   padding: 12px;

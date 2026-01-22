@@ -35,8 +35,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressText = document.getElementById('progressText');
   const errorMessage = document.getElementById('errorMessage');
 
+  // DOM Elements - Waveform
+  const waveformPlaying = document.getElementById('waveformPlaying');
+  const waveformPaused = document.getElementById('waveformPaused');
+
   // Current request ID for cancellation
   let currentRequestId = null;
+
+  // Waveform animation state
+  let waveformAnimationId = null;
+  let waveformPhase = 0;
+  const WAVEFORM_BARS = 48;
+  const WAVEFORM_WIDTH = 288;
+  const WAVEFORM_HEIGHT = 60;
 
   // Voice options for each provider
   const voiceOptions = {
@@ -61,6 +72,88 @@ document.addEventListener('DOMContentLoaded', () => {
       'zh-CN': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
     }
   };
+
+  // Waveform Animation Functions
+  function generateWaveformData() {
+    const data = [];
+    for (let i = 0; i < WAVEFORM_BARS; i++) {
+      // Create organic-looking wave using multiple sine waves
+      const x = i / WAVEFORM_BARS;
+      const wave1 = Math.sin(x * Math.PI * 4 + waveformPhase) * 0.4;
+      const wave2 = Math.sin(x * Math.PI * 7 + waveformPhase * 1.3) * 0.25;
+      const wave3 = Math.sin(x * Math.PI * 11 + waveformPhase * 0.7) * 0.15;
+      const noise = (Math.random() - 0.5) * 0.2;
+
+      // Combine waves with envelope
+      const envelope = Math.sin(x * Math.PI) * 0.8 + 0.2;
+      const value = (wave1 + wave2 + wave3 + noise) * envelope;
+
+      // Clamp to -1 to 1
+      data.push(Math.max(-0.95, Math.min(0.95, value)));
+    }
+    return data;
+  }
+
+  function drawWaveform(svgElement, data, animated = true) {
+    if (!svgElement) return;
+
+    // Clear SVG
+    svgElement.innerHTML = '';
+
+    const centerY = WAVEFORM_HEIGHT / 2;
+    const barWidth = WAVEFORM_WIDTH / data.length;
+    const barGap = 2;
+
+    // Draw bars
+    for (let i = 0; i < data.length; i++) {
+      const amplitude = animated ? Math.abs(data[i]) : 0.15;
+      const barHeight = Math.max(2, amplitude * centerY * 0.9);
+
+      const x = i * barWidth;
+      const y = centerY - barHeight;
+
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('class', 'waveform-bar');
+      rect.setAttribute('x', x);
+      rect.setAttribute('y', y);
+      rect.setAttribute('width', Math.max(1, barWidth - barGap));
+      rect.setAttribute('height', barHeight * 2);
+      rect.setAttribute('rx', '1');
+      rect.setAttribute('ry', '1');
+
+      svgElement.appendChild(rect);
+    }
+  }
+
+  function startWaveformAnimation() {
+    if (waveformAnimationId) return;
+
+    function animate() {
+      waveformPhase += 0.08;
+      const data = generateWaveformData();
+      drawWaveform(waveformPlaying, data, true);
+      waveformAnimationId = requestAnimationFrame(animate);
+    }
+    animate();
+  }
+
+  function stopWaveformAnimation() {
+    if (waveformAnimationId) {
+      cancelAnimationFrame(waveformAnimationId);
+      waveformAnimationId = null;
+    }
+  }
+
+  function drawStaticWaveform(svgElement) {
+    // Draw a static "paused" waveform
+    const data = [];
+    for (let i = 0; i < WAVEFORM_BARS; i++) {
+      const x = i / WAVEFORM_BARS;
+      const wave = Math.sin(x * Math.PI * 4 + waveformPhase) * 0.3;
+      data.push(wave);
+    }
+    drawWaveform(svgElement, data, true);
+  }
 
   // Initialize
   loadSettings();
@@ -122,6 +215,9 @@ document.addEventListener('DOMContentLoaded', () => {
     pausedState.classList.add('hidden');
     errorState.classList.add('hidden');
 
+    // Stop waveform animation by default
+    stopWaveformAnimation();
+
     // Show appropriate container based on status
     switch (state.status) {
       case 'idle':
@@ -140,10 +236,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       case 'playing':
         playingState.classList.remove('hidden');
+        startWaveformAnimation();
         break;
 
       case 'paused':
         pausedState.classList.remove('hidden');
+        drawStaticWaveform(waveformPaused);
         break;
 
       case 'error':

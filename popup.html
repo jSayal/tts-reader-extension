@@ -76,6 +76,11 @@
     <!-- State: Playing -->
     <div id="playingState" class="state-container hidden">
       <div class="playback-container">
+        <div class="waveform-container">
+          <svg id="waveformPlaying" class="waveform" viewBox="0 0 288 60" preserveAspectRatio="none">
+            <!-- Waveform will be drawn by JavaScript -->
+          </svg>
+        </div>
         <div class="playback-status">
           <span class="pulse-dot"></span>
           <span>Playing audio...</span>
@@ -100,6 +105,11 @@
     <!-- State: Paused -->
     <div id="pausedState" class="state-container hidden">
       <div class="playback-container">
+        <div class="waveform-container">
+          <svg id="waveformPaused" class="waveform paused" viewBox="0 0 288 60" preserveAspectRatio="none">
+            <!-- Waveform will be drawn by JavaScript -->
+          </svg>
+        </div>
         <div class="playback-status">
           <span class="pulse-dot paused"></span>
           <span>Paused</span>

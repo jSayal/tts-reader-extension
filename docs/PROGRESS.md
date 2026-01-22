@@ -104,25 +104,31 @@ State synchronized via `chrome.storage.local` so all components (popup, backgrou
 
 ### TODOs / Future Improvements
 
-1. **Fallback Audio Playback**
+1. **Settings Page** *(Priority: High)*
+   - Create dedicated settings/options page for the extension
+   - Move API key management to settings page
+   - Add advanced configuration options (speech rate, pitch, etc.)
+   - Organize UI better - popup for quick actions, settings for configuration
+
+2. **Fallback Audio Playback**
    - Currently if content script is unavailable, audio is stored but can't play
    - Consider: Play audio in popup itself as fallback (requires keeping popup open)
 
-2. **Keyboard Shortcuts**
+3. **Keyboard Shortcuts**
    - Add keyboard shortcuts for pause/resume/stop
    - Chrome extension commands API could enable global shortcuts
 
-3. **Progress Bar**
+4. **Progress Bar**
    - Replace text progress with visual progress bar
    - Show chunk progress during loading
 
-4. **Voice Preview**
+5. **Voice Preview**
    - Add a "preview" button to hear voice sample before full synthesis
 
-5. **History**
+6. **History**
    - Store recent TTS requests for quick replay
 
-6. **Auto-inject Content Script**
+7. **Auto-inject Content Script**
    - Use `chrome.scripting.executeScript` to inject content script on-demand when needed
    - Would fix the "refresh page" requirement for new tabs
 
@@ -136,3 +142,82 @@ State synchronized via `chrome.storage.local` so all components (popup, backgrou
 - [x] Auth errors expand API key section
 - [x] State persists across popup close/reopen
 - [x] Graceful handling on chrome:// pages
+
+---
+
+## 2026-01-23: SVG Waveform Visualization
+
+### Plan Summary
+
+Add a visually appealing SVG-based waveform animation to the popup UI that displays during audio playback and paused states.
+
+### Implementation Details
+
+#### Technical Approach
+
+Since audio plays in the content script context (separate from popup), real audio analysis via Web Audio API isn't possible. Instead, implemented a **simulated waveform** using procedural animation:
+
+- Multiple layered sine waves at different frequencies create organic movement
+- Random noise adds natural variation
+- Envelope function shapes amplitude across the waveform
+- **Bars visualization** - vertical bars centered on the midline, mirrored above/below
+
+#### Modified: `popup.html`
+- Added SVG containers in playing and paused states
+- `#waveformPlaying` - animated waveform during playback
+- `#waveformPaused` - static waveform when paused
+
+#### Modified: `popup.css`
+- `.waveform-container` - container with gradient background and border
+- `.waveform` - SVG element styling (60px height)
+- `.waveform-bar` - individual bar styling with primary color fill (80% opacity)
+- Paused state uses warning color (yellow/orange) at 60% opacity
+
+#### Modified: `popup.js`
+New waveform animation system:
+- `generateWaveformData()` - creates wave data using layered sine waves
+- `drawWaveform(svgElement, data, animated)` - renders SVG rect elements as bars
+- `startWaveformAnimation()` - starts `requestAnimationFrame` loop
+- `stopWaveformAnimation()` - cancels animation frame
+- `drawStaticWaveform()` - draws frozen waveform for paused state
+- `renderState()` - now manages animation lifecycle
+
+**Animation Parameters:**
+- 48 bars across 288px width
+- 60px height with bars centered vertically
+- 2px gap between bars with rounded corners
+- Phase increment: 0.08 per frame (~60fps)
+- Bars mirror above/below center line
+
+### Lessons Learned
+
+1. **Cross-Context Audio Analysis**
+   - **Issue**: Cannot use Web Audio API analyser in popup when audio plays in content script
+   - **Solution**: Simulated waveform looks authentic without actual audio data
+   - **Alternative considered**: Could send audio data via storage, but too slow for real-time
+
+2. **SVG vs Canvas**
+   - SVG chosen for better CSS styling integration (colors via CSS variables)
+   - Bars visualization provides clean, modern look similar to audio equalizers
+   - Easy to style with CSS (fill color, opacity, rounded corners)
+
+3. **Animation Performance**
+   - `requestAnimationFrame` ensures smooth 60fps animation
+   - Animation automatically stops when state changes (prevents memory leaks)
+   - Phase variable persists to maintain wave continuity
+
+### Files Changed
+
+| File | Status | Description |
+|------|--------|-------------|
+| `popup.html` | Modified | Added SVG waveform containers |
+| `popup.css` | Modified | Waveform bar styling |
+| `popup.js` | Modified | Waveform animation system with bars visualization |
+
+### Testing Checklist
+
+- [ ] Waveform animates smoothly during playing state
+- [ ] Waveform freezes (static) during paused state
+- [ ] Animation stops when returning to idle
+- [ ] Colors match state (blue for playing, yellow for paused)
+- [ ] No memory leaks from animation frames
